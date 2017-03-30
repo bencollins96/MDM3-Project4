@@ -1,0 +1,8 @@
+*.mat
+*.csv
+*.txt
+Data/
+Data1/
+Data (copy)/
+*.zip
+dijkstra/
