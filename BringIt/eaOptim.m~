@@ -1,0 +1,71 @@
+function [objective] = eaOptim(x,sourceCoordinates,targetCoordinates,adjMatrix,impossibleIndex)
+
+chargeCoordinates = [x(1:length(x)/2)',x(length(x)/2 +1:end)'];
+
+%Create cost matrix
+coordinates = [sourceCoordinates;targetCoordinates;chargeCoordinates];
+costMatrix  = squareform(pdist(coordinates,@Haversine));
+costMatrix = costMatrix./17.78 + 120;
+costMatrix = costMatrix.*adjMatrix;
+
+numSource = size(sourceCoordinates,1);
+numTarget = size(targetCoordinates,1);
+
+
+impossible = sum(sum(impossibleIndex));
+%Find shortest path routes using dijkstra
+%Only allow paths where each step is less than fixed distance
+%Count number of infeasible journeys from all the sources to each target in
+%count 
+%Find the cost of maximum path from any of the sources to each target in lMax
+
+AllPaths = cell(1)
+AllCosts = cell(1)
+for i = 1:numTarget
+    possibleIndices = 1:numSource;
+    possibleIndices = possibleIndices(impossibleIndex(:,i));
+    [costs,paths] = dijkstra(adjMatrix,costMatrix,possibleIndices,numSource + Target);
+    AllPaths{i} = paths;
+    AllCos
+end
+
+
+AllPaths = paths(:);
+AllCosts = costs(:);
+
+
+%Count all the paths that dont go anywhere
+countNowhere= 0;
+countTooLong = 0;
+for i =1:size(AllPaths,1)
+    
+    if length(paths{i}) ==1
+        countNowhere = countNowhere + 1;
+        continue
+    end
+    
+    if costs(i) > 4*3600
+        countTooLong = countTooLong + 1;
+    end 
+end
+
+lMean = mean(setdiff(costs,inf));
+
+usedStations = get_usedStations(AllPaths,numSource,numTarget);
+numUsed = numel(usedStations);
+
+objective =  1e8*(countNowhere + countTooLong - impossible) + 1e4*numUsed + lMean;
+
+
+function [usedStations] = get_usedStations(AllPaths,numSource,numTarget)
+    chrgList = [];
+    for j =1:length(AllPaths)
+        if length(AllPaths{j}) > 2
+            chrgList =[chrgList, AllPaths{j}(2:end-1) ];
+        end
+    end
+usedStations = unique(chrgList) - (numSource + numTarget);
+
+end
+
+end

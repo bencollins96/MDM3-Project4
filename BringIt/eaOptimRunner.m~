@@ -1,0 +1,178 @@
+numTarget = 3;
+numChrg = 100;
+maxTime =2*3600;
+speed = 27.78;
+
+trans = [538];
+[sourceCoordinates,targetCoordinates] = get_london_coords(lat1,lng1,trans);
+
+%Add test point far away to introduce impossible
+%sourceCoordinates = [sourceCoordinates; [56,-2]];
+numSource = size(sourceCoordinates,1);
+numTarget = length(trans);
+
+% Find coordinates of source hospitals
+%lat = lat1(1:numSource);
+%lng = lng1(1:numSource);
+%sourceCoordinates = [lat,lng];
+
+% Create fictitious target hospital
+%Make Adjacency Matrix
+adjMatrix = get_adjMatrix(numSource,numTarget,numChrg);
+
+%Find impossible Journeys.
+%Distances = pdist2(targetCoordinates,sourceCoordinates,@Haversine);
+%impossible = sum(sum(Distances > maxTime*speed));
+
+%Define lower & upper bounds.
+minLat = min(sourceCoordinates(:,1));
+minLng = min(sourceCoordinates(:,2));
+maxLat = max(sourceCoordinates(:,1));
+maxLng = max(sourceCoordinates(:,2));
+
+lb = [ones(numChrg,1)*minLat;ones(numChrg,1)*minLng];
+ub = [ones(numChrg,1)*maxLat;ones(numChrg,1)*maxLng];
+
+InitialPopulationRange_Data = [lb,ub]';
+
+%set initial population to sourceCoordinates
+InitialPopulation = sourceCoordinates(1:numChrg,:);
+InitialPopulation = InitialPopulation(:);
+
+PopulationSize_Data = 100;
+
+impossibleIndex = [];
+for targ=1:numTarget
+    ranges = pdist2(targetCoordinates(targ,:),sourceCoordinates,@Haversine);
+    ranges = ranges'./speed;
+    impossibleIndex = [impossibleIndex,ranges>maxTime];
+end
+
+
+[x,fval,exitflag,output,population,score] = eaOptimFunc(sourceCoordinates,targetCoordinates,adjMatrix,impossibleIndex,numChrg*2,lb,ub,InitialPopulationRange_Data,PopulationSize_Data,InitialPopulation);
+
+chargeCoordinates = [x(1:length(x)/2)',x(length(x)/2 +1:end)'];
+
+clf
+figure(1); hold on;
+%Plot all 
+geoshow(sourceCoordinates(:,1),sourceCoordinates(:,2),'DisplayType','Point','MarkerEdgeColor','r','Marker','.','MarkerSize',30);
+geoshow(targetCoordinates(:,1),targetCoordinates(:,2),'DisplayType','Point','MarkerEdgeColor','b','Marker','.','MarkerSize',30);
+
+%Calculate paths.
+[allCosts,allPaths] = eaOptimView(chargeCoordinates,sourceCoordinates,targetCoordinates,adjMatrix,impossibleIndex);
+
+COSTS = [];
+PATHS = [];
+
+for i =1:length(allCosts)
+    COSTS =[COSTS;allCosts{i}];
+    PATHS =[PATHS;allPaths{i}];
+end
+
+allCosts = COSTS(:);
+allPaths = PATHS(:);
+
+%put all coordinates back together like in eaOptim for easy access
+AllCoords = [sourceCoordinates;targetCoordinates;chargeCoordinates];
+
+%Calculate info
+usedStations = get_usedStations(allPaths,numSource,numTarget);
+connectedHospitals = get_connectedHospitals(
+
+geoshow(chargeCoordinates(usedStations,1),chargeCoordinates(usedStations,2),'DisplayType','Point','MarkerEdgeColor','k','Marker','.','MarkerSize',30);
+legend('Source Hospitals','Transplant Hospitals','Charging Points');
+
+%Print out all paths.
+
+for i =1:length(allPaths)
+    CurrentPath = allPaths{i};
+    
+    if isnan(CurrentPath)
+        continue
+    end
+    
+    pathCoord = AllCoords(CurrentPath,:);
+    geoshow(pathCoord(:,1),pathCoord(:,2),'MarkerEdgeColor','g');
+end
+
+unconnected =length(find(allCosts ==Inf));
+connected = length(find(allCosts < maxTime));
+tooLong = length(find(allCosts > maxTime & allCosts < inf));
+
+%Print out Metrics and info
+fprintf('Total number of journeys = %d\n', numTarget*numSource - sum(sum(impossibleIndex)));
+fprintf('Number of impossible journeys =  %d\n' , sum(sum(impossibleIndex)));
+fprintf('Number of possible journeys that have not been connected = %d\n', unconnected);
+fprintf('Number of possible journeys that are too long = %d\n',tooLong);
+fprintf('Number of possible journeys that have been connected = %d\n',connected);
+fprintf('Number of charging stations needed = %d\n',  length(usedStations));
+fprintf('Mean Journey time to target hospital = %d\n', mean(allCosts(allCosts~=inf)));
+
+
+function [sourceCoordinates, targetCoordinates] = get_london_coords(lat1,lng1,trans)
+ 
+%London Coordinates
+latlng = [lat1,lng1];
+
+%FInd possible latitudes
+latL1 = latlng(:,1) < 54.1;
+latL2 = latlng(:,1) > 52;
+Posslat= latL1.*latL2;
+
+%Find possbile longitudes
+lngL1 = latlng(:,2) <  10;
+lngL2 = latlng(:,2) > -10;
+Posslng = lngL1.*lngL2; 
+
+%Possible list.
+Coord =  Posslat.*Posslng;
+lat = latlng(Coord==1,1);
+lng = latlng(Coord==1,2);
+
+sourceCoordinates = [lat,lng];
+
+targetCoordinates = [];
+for i =1:length(trans)
+    target_ind = sum(Coord(1:trans(i)));
+    targetCoordinates = [targetCoordinates;sourceCoordinates(target_ind,:)];
+end
+
+end
+
+function [connectedHospitals] =(get_connectedHospitals(allPaths)
+connectedHospitals = [];
+    for i=1:length(allPaths)
+        if length(allPaths{i}) >=2
+            connectedHospitals = [connectedHospitals,allPaths{i}(1),allPaths{i}(end)];
+        end
+    end
+    
+connectedHospitals = unique(connectedHospitals);
+end
+  
+function [usedStations] = get_usedStations(allPaths,numSource,numTarget)
+    chrgList = [];
+    for i =1:length(allPaths)
+        if length(allPaths{i}) > 2
+            chrgList =[chrgList, allPaths{i}(2:end-1) ];
+        end
+    end
+usedStations = unique(chrgList) - (numSource + numTarget);
+
+end
+
+function [adjMatrix] = get_adjMatrix(numSource,numTarget,numChrg)
+    n1 = numSource+numTarget+numChrg;
+    n2 = numSource;
+    graph1 = ones(n1,n1);
+    diagonal = diag(ones(1,n1));
+    adjMatrix = graph1 -diagonal;
+    graph2sub = ones(n2,n2) - diag(ones(1,n2));
+    graph2 = zeros(n1,n1);
+    graph2(1:n2,1:n2)  = graph2sub;
+    adjMatrix = adjMatrix - graph2;
+    adjMatrix(n2 +1:n2+numTarget,:) =0; %No target -> elsewhere
+    adjMatrix(n2 + 1: n2 + numTarget,n2 + 1: n2 + numTarget) = 0; %No target to target
+    adjMatrix(n2+1:n2+ numTarget + numChrg,1:n2) = 0;
+end

@@ -28,6 +28,3 @@ function distance = Haversine(phi1,phi2,lambda1,lambda2)
     
     
 end
-
-
-% Haversine(52.4531832221, -1.93847616589, 52.265532019799998, -2.150880605110000)
